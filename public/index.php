@@ -191,6 +191,51 @@ switch ($action) {
        $controller->search(['term' => $term]);
        exit();
        break;
+    case 'articles/show':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de l'article est invalide.");
+        $controller = new ArticleController($db);
+        $viewData = $controller->show((int)$id);
+        break;
+    case 'articles/historique-prix':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de l'article est invalide.");
+        $controller = new ArticleController($db);
+        $controller->historiquePrix((int)$id);
+        exit();
+        break;
+    case 'articles/stock-par-depot':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de l'article est invalide.");
+        $controller = new ArticleController($db);
+        $controller->stockParDepot((int)$id);
+        exit();
+        break;
+    case 'articles/export':
+        $controller = new ArticleController($db);
+        $controller->export();
+        exit();
+        break;
+    case 'articles/import':
+        $controller = new ArticleController($db);
+        $viewData = $controller->import($_POST);
+        break;
+    // --- DEPOTS ---
+    case 'depots':
+    case 'depots/index':
+        $controller = new DepotController($db);
+        $viewData = $controller->index();
+        break;
+    case 'depots/create':
+        $controller = new DepotController($db);
+        $viewData = $controller->create($_POST);
+        break;
+    case 'depots/edit':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de depot invalide.");
+        $controller = new DepotController($db);
+        $viewData = $controller->edit((int)$id, $_POST);
+        break;
 
 
     // --- DEVIS ---
