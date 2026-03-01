@@ -1,279 +1,128 @@
 <?php
 require_once __DIR__ . '/../includes/permissions.php';
-require_once __DIR__ . '/../includes/Validator.php';
-require_once __DIR__ . '/../includes/AuditLogger.php';
-require_once __DIR__ . '/../includes/CsrfMiddleware.php';
 require_once __DIR__ . '/../models/article.php';
-require_once __DIR__ . '/../models/StockManager.php';
 
 class ArticleController {
-    private Article $articleModel;
-    private StockManager $stockManager;
-    private AuditLogger $auditLogger;
-    private PDO $db;
+    private $articleModel;
+    private $db;
 
     public function __construct(PDO $db) {
         $this->articleModel = new Article($db);
-        $this->stockManager = new StockManager($db);
-        $this->auditLogger  = new AuditLogger($db);
         $this->db = $db;
     }
-
-    // ----------------------------------------------------------------
-    // Liste
-    // ----------------------------------------------------------------
 
     public function index(array $getData = []): array {
         if (!hasPermission('articles', 'view')) {
             die("Accès refusé.");
         }
-        $articles      = $this->articleModel->getLimited(50);
+
+        $articles = $this->articleModel->getLimited(50);
         $totalArticles = $this->articleModel->getTotalCount();
 
         return [
             'view' => 'articles/index',
             'data' => [
-                'articles'      => $articles,
-                'totalArticles' => $totalArticles,
-            ],
+                'articles' => $articles,
+                'totalArticles' => $totalArticles
+            ]
         ];
     }
-
-    // ----------------------------------------------------------------
-    // Recherche AJAX
-    // ----------------------------------------------------------------
 
     public function search(array $data): void {
         $term = trim($data['term'] ?? '');
         header('Content-Type: application/json');
-        $articles = $term === ''
-            ? $this->articleModel->getLimited(50)
-            : $this->articleModel->searchFull($term, 50);
-
-        foreach ($articles as &$article) {
-            $article['editable']  = hasPermission('articles', 'edit');
-            $article['deletable'] = hasPermission('articles', 'delete');
-            $article['viewable']  = hasPermission('articles', 'view');
-            // Normalise le prix revient pour l'affichage JS
-            $article['prix_revient_display'] = $article['prix_revient_display']
-                ?? $article['prix_revient']
-                ?? $article['pr']
-                ?? null;
+        if ($term === '') {
+            $articles = $this->articleModel->getLimited(50);
+        } else {
+            $articles = $this->articleModel->searchFull($term, 50);
         }
-        unset($article);
+        foreach ($articles as &$article) {
+            $article['editable'] = hasPermission('articles', 'edit');
+            $article['deletable'] = hasPermission('articles', 'delete');
+        }
         echo json_encode($articles);
         exit();
     }
-
-    // ----------------------------------------------------------------
-    // Création
-    // ----------------------------------------------------------------
 
     public function create(array $data): array {
         if (!hasPermission('articles', 'create')) {
             die("Accès refusé.");
         }
 
-        $error      = null;
+        $error = null;
         $fournisseurs = $this->getFournisseurs();
-        $categories   = $this->articleModel->getAllCategories();
-        $depots       = $this->stockManager->getDepotsActifs();
+        $categories = $this->getCategories();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            CsrfMiddleware::verify();
+            $nom_art = trim($data['nom_art'] ?? '');
+            $pr = floatval($data['pr'] ?? 0);
+            $prix_vente = floatval($data['prix_vente'] ?? 0);
+            $fournisseur_id = trim($data['fournisseur_id'] ?? '');
+            $sku = trim($data['sku'] ?? '');
+            $categorie_id = $data['categorie_id'] ?? null;
 
-            $v = new Validator($data);
-            $v->required('nom_art', "Nom de l'article")
-              ->maxLength('nom_art', 255, "Nom de l'article")
-              ->required('prix_revient', 'Prix de revient')
-              ->positiveNumber('prix_revient', 'Prix de revient')
-              ->nonNegativeNumber('prix_vente', 'Prix de vente')
-              ->required('fournisseur_id', 'Fournisseur')
-              ->nonNegativeNumber('stock_minimal', 'Stock minimal')
-              ->nonNegativeNumber('stock_maximal', 'Stock maximal')
-              ->nonNegativeNumber('poids_kg', 'Poids')
-              ->inList('statut', ['actif', 'inactif', 'discontinued'], 'Statut');
-
+            if (empty($nom_art)) {
+                $error = "Le nom de l'article est obligatoire.";
+            }
+            if ($pr <= 0) {
+                $error = "Le prix de revient doit être supérieur à zéro.";
+            }
+            if (empty($fournisseur_id)) {
+                $error = "Veuillez sélectionner un fournisseur.";
+            }
             $userId = $_SESSION['user_id'] ?? null;
             if (!$userId) {
                 $error = "Utilisateur non authentifié.";
-            } elseif ($v->fails()) {
-                $error = $v->getFirstError();
-            } else {
+            }
+            if (!$error) {
                 try {
-                    $articleId = $this->articleModel->create($data, (int)$userId);
-
-                    // Gestion image
-                    if (!empty($_FILES['image']['name'])) {
-                        $imagePath = $this->handleImageUpload($_FILES['image'], $articleId);
-                        if ($imagePath) {
-                            $this->articleModel->updateImage($articleId, $imagePath, (int)$userId);
-                        }
-                    }
-
-                    // Stock initial par dépôt
-                    if (!empty($data['depots']) && is_array($data['depots'])) {
-                        foreach ($data['depots'] as $depotId => $qtInfo) {
-                            $qt = (int)($qtInfo['quantite'] ?? 0);
-                            $em = trim($qtInfo['emplacement'] ?? '');
-                            if ($qt > 0 || $em !== '') {
-                                $this->stockManager->upsertStock($articleId, (int)$depotId, $qt, $em ?: null);
-                            }
-                        }
-                    }
-
-                    $this->auditLogger->log('articles', $articleId, 'CREATE', (int)$userId, null, $data);
+                    $articleData = [
+                        'nom_art' => $nom_art,
+                        'sku' => $sku ?: null,
+                        'pr' => $pr,
+                        'prix_vente' => $prix_vente,
+                        'fournisseur_id' => $fournisseur_id,
+                        'categorie_id' => $categorie_id,
+                        'statut' => 'actif'
+                    ];
+                    $articleId = $this->articleModel->create($articleData, $userId);
                     header('Location: index.php?action=articles');
                     exit();
                 } catch (PDOException $e) {
-                    $error = "Erreur lors de la création : " . $e->getMessage();
+                    $error = "Erreur lors de la création de l'article : " . $e->getMessage();
                     error_log($error);
                 }
             }
         }
-
         return [
             'view' => 'articles/create',
             'data' => [
-                'error'        => $error,
+                'error' => $error,
                 'fournisseurs' => $fournisseurs,
-                'categories'   => $categories,
-                'depots'       => $depots,
-                'csrf_field'   => CsrfMiddleware::field(),
-            ],
+                'categories' => $categories
+            ]
         ];
     }
 
-    // ----------------------------------------------------------------
-    // Modification
-    // ----------------------------------------------------------------
-
-    public function edit(int $id, array $data = []): array {
-        if (!hasPermission('articles', 'edit')) {
-            die("Accès refusé.");
+    private function getFournisseurs(): array {
+        try {
+            $stmt = $this->db->query("SELECT id_fournisseurs, nom_fournisseurs FROM fournisseurs ORDER BY nom_fournisseurs");
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Erreur récupération fournisseurs : " . $e->getMessage());
+            return [];
         }
-
-        $error      = null;
-        $article    = $this->articleModel->findById($id);
-        $fournisseurs = $this->getFournisseurs();
-        $categories   = $this->articleModel->getAllCategories();
-        $stockDepots  = $this->stockManager->getStockByArticle($id);
-        $depots       = $this->stockManager->getDepotsActifs();
-
-        if (!$article) {
-            return ['view' => 'error', 'data' => ['message' => "Article non trouvé."]];
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            CsrfMiddleware::verify();
-
-            $v = new Validator($data);
-            $v->required('nom_art', "Nom de l'article")
-              ->maxLength('nom_art', 255, "Nom de l'article")
-              ->required('prix_revient', 'Prix de revient')
-              ->positiveNumber('prix_revient', 'Prix de revient')
-              ->nonNegativeNumber('prix_vente', 'Prix de vente')
-              ->required('fournisseur_id', 'Fournisseur')
-              ->nonNegativeNumber('stock_minimal', 'Stock minimal')
-              ->nonNegativeNumber('stock_maximal', 'Stock maximal')
-              ->nonNegativeNumber('poids_kg', 'Poids')
-              ->inList('statut', ['actif', 'inactif', 'discontinued'], 'Statut');
-
-            $userId = $_SESSION['user_id'] ?? null;
-            if (!$userId) {
-                $error = "Utilisateur non authentifié.";
-            } elseif ($v->fails()) {
-                $error = $v->getFirstError();
-            } else {
-                try {
-                    $oldPr = (float)($article['prix_revient'] ?? $article['pr'] ?? 0);
-                    $oldPv = (float)($article['prix_vente'] ?? 0);
-                    $newPr = (float)$data['prix_revient'];
-                    $newPv = (float)($data['prix_vente'] ?? 0);
-
-                    $this->articleModel->update($id, $data, (int)$userId);
-
-                    // Historique prix si changement
-                    if ($oldPr !== $newPr || $oldPv !== $newPv) {
-                        $raison = trim($data['raison_changement_prix'] ?? '');
-                        $this->articleModel->addPrixHistorique($id, $oldPr, $newPr, $oldPv, $newPv, (int)$userId, $raison);
-                    }
-
-                    // Gestion image
-                    if (!empty($_FILES['image']['name'])) {
-                        $imagePath = $this->handleImageUpload($_FILES['image'], $id);
-                        if ($imagePath) {
-                            $this->articleModel->updateImage($id, $imagePath, (int)$userId);
-                        }
-                    }
-
-                    // Stock par dépôt
-                    if (!empty($data['depots']) && is_array($data['depots'])) {
-                        foreach ($data['depots'] as $depotId => $qtInfo) {
-                            $qt = (int)($qtInfo['quantite'] ?? 0);
-                            $em = trim($qtInfo['emplacement'] ?? '');
-                            $this->stockManager->upsertStock($id, (int)$depotId, $qt, $em ?: null);
-                        }
-                    }
-
-                    $this->auditLogger->log('articles', $id, 'UPDATE', (int)$userId, $article, $data);
-                    header('Location: index.php?action=articles');
-                    exit();
-                } catch (PDOException $e) {
-                    $error = "Erreur lors de la mise à jour : " . $e->getMessage();
-                    error_log($error);
-                }
-            }
-        }
-
-        return [
-            'view' => 'articles/edit',
-            'data' => [
-                'article'      => $article,
-                'error'        => $error,
-                'fournisseurs' => $fournisseurs,
-                'categories'   => $categories,
-                'stockDepots'  => $stockDepots,
-                'depots'       => $depots,
-                'csrf_field'   => CsrfMiddleware::field(),
-            ],
-        ];
     }
 
-    // ----------------------------------------------------------------
-    // Détail article
-    // ----------------------------------------------------------------
-
-    public function show(int $id): array {
-        if (!hasPermission('articles', 'view')) {
-            die("Accès refusé.");
+    private function getCategories(): array {
+        try {
+            $stmt = $this->db->query("SELECT id, nom FROM categories ORDER BY nom");
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Erreur récupération catégories : " . $e->getMessage());
+            return [];
         }
-        $article = $this->articleModel->findById($id);
-        if (!$article) {
-            return ['view' => 'error', 'data' => ['message' => "Article non trouvé."]];
-        }
-
-        $stockDepots    = $this->stockManager->getStockByArticle($id);
-        $prixHistorique = $this->articleModel->getPrixHistorique($id);
-
-        $userId = $_SESSION['user_id'] ?? null;
-        if ($userId) {
-            $this->auditLogger->log('articles', $id, 'VIEW', (int)$userId);
-        }
-
-        return [
-            'view' => 'articles/show',
-            'data' => [
-                'article'        => $article,
-                'stockDepots'    => $stockDepots,
-                'prixHistorique' => $prixHistorique,
-            ],
-        ];
     }
-
-    // ----------------------------------------------------------------
-    // Suppression (soft delete)
-    // ----------------------------------------------------------------
 
     public function delete(int $id): void {
         if (!hasPermission('articles', 'delete')) {
@@ -286,143 +135,221 @@ class ArticleController {
             return;
         }
 
-        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $userId = $_SESSION['user_id'] ?? null;
         $this->articleModel->softDelete($id, $userId);
-        $this->auditLogger->log('articles', $id, 'DELETE', $userId, $article, null);
         header('Location: index.php?action=articles');
         exit();
     }
 
-    // ----------------------------------------------------------------
-    // Historique prix (AJAX / vue)
-    // ----------------------------------------------------------------
-
-    public function historiquePrix(int $id): void {
-        if (!hasPermission('articles', 'view')) {
+    public function edit(int $id, array $data = []): array {
+        if (!hasPermission('articles', 'edit')) {
             die("Accès refusé.");
         }
-        header('Content-Type: application/json');
-        $historique = $this->articleModel->getPrixHistorique($id);
-        echo json_encode($historique);
-        exit();
+
+        $error = null;
+        $article = $this->articleModel->findById($id);
+        $fournisseurs = $this->getFournisseurs();
+        $categories = $this->getCategories();
+
+        if (!$article) {
+            return ['view' => 'error', 'data' => ['message' => "Article non trouvé."]];
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $nom_art = trim($data['nom_art'] ?? '');
+            $pr = floatval($data['pr'] ?? 0);
+            $prix_vente = floatval($data['prix_vente'] ?? 0);
+            $fournisseur_id = trim($data['fournisseur_id'] ?? '');
+            $sku = trim($data['sku'] ?? '');
+            $categorie_id = $data['categorie_id'] ?? null;
+
+            if (empty($nom_art)) {
+                $error = "Le nom de l'article est obligatoire.";
+            }
+            if ($pr <= 0) {
+                $error = "Le prix de revient doit être supérieur à zéro.";
+            }
+            if (empty($fournisseur_id)) {
+                $error = "Veuillez sélectionner un fournisseur.";
+            }
+            if (!$error) {
+                try {
+                    $userId = $_SESSION['user_id'] ?? null;
+                    $articleData = [
+                        'nom_art' => $nom_art,
+                        'sku' => $sku ?: null,
+                        'pr' => $pr,
+                        'prix_vente' => $prix_vente,
+                        'fournisseur_id' => $fournisseur_id,
+                        'categorie_id' => $categorie_id,
+                        'statut' => $article['statut'] ?? 'actif'
+                    ];
+                    $this->articleModel->update($id, $articleData, $userId);
+                    header('Location: index.php?action=articles');
+                    exit();
+                } catch (PDOException $e) {
+                    $error = "Erreur lors de la mise à jour : " . $e->getMessage();
+                    error_log($error);
+                }
+            }
+        }
+
+        return [
+            'view' => 'articles/edit',
+            'data' => [
+                'article' => $article,
+                'error' => $error,
+                'fournisseurs' => $fournisseurs,
+                'categories' => $categories
+            ]
+        ];
     }
 
-    // ----------------------------------------------------------------
-    // Stock par dépôt (AJAX)
-    // ----------------------------------------------------------------
-
-    public function stockParDepot(int $id): void {
+    public function show(int $id): array {
         if (!hasPermission('articles', 'view')) {
             die("Accès refusé.");
         }
-        header('Content-Type: application/json');
-        $stock = $this->stockManager->getStockByArticle($id);
-        echo json_encode($stock);
-        exit();
+
+        $article = $this->articleModel->findById($id);
+        if (!$article) {
+            return ['view' => 'error', 'data' => ['message' => "Article non trouvé."]];
+        }
+        return ['view' => 'articles/show', 'data' => ['article' => $article]];
     }
 
-    // ----------------------------------------------------------------
-    // Export CSV
-    // ----------------------------------------------------------------
+    // ============================================================
+    // EXPORT CSV (temporaire - à améliorer en Excel plus tard)
+    // ============================================================
 
-    public function export(): void {
+    public function exportCSV(): void {
         if (!hasPermission('articles', 'view')) {
             die("Accès refusé.");
         }
-        $articles = $this->articleModel->getAllForExport();
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="articles_' . date('Y-m-d') . '.csv"');
-        $out = fopen('php://output', 'w');
-        // BOM UTF-8 pour Excel
-        fputs($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID', 'SKU', 'Nom', 'Prix Revient', 'Prix Vente', 'Quantité', 'Statut', 'Unité', 'Stock min', 'Stock max', 'Poids (kg)', 'Couleur', 'Notes', 'Fournisseur'], ';');
-        foreach ($articles as $a) {
-            fputcsv($out, [
-                $a['id_articles'],
-                $a['sku'] ?? '',
-                $a['nom_art'],
-                $a['prix_revient'],
-                $a['prix_vente'] ?? '',
-                $a['quantite_totale'] ?? 0,
-                $a['statut'] ?? '',
-                $a['unite_mesure'] ?? '',
-                $a['stock_minimal'] ?? 0,
-                $a['stock_maximal'] ?? 0,
-                $a['poids_kg'] ?? '',
-                $a['couleur'] ?? '',
-                $a['notes_internes'] ?? '',
-                $a['nom_fournisseurs'],
+
+        try {
+            $articles = $this->articleModel->getAll();
+
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="articles_' . date('Y-m-d') . '.csv"');
+
+            $output = fopen('php://output', 'w');
+            
+            // BOM UTF-8 pour Excel
+            fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            // En-têtes
+            fputcsv($output, [
+                'ID',
+                'SKU',
+                'Nom Article',
+                'Prix Revient',
+                'Prix Vente',
+                'Quantité Total',
+                'Statut',
+                'Unité Mesure',
+                'Stock Min',
+                'Stock Max',
+                'Poids (kg)',
+                'Couleur',
+                'Catégorie',
+                'Fournisseur',
+                'Notes'
             ], ';');
+
+            // Données
+            foreach ($articles as $article) {
+                fputcsv($output, [
+                    $article['id_articles'],
+                    $article['sku'] ?? '',
+                    $article['nom_art'],
+                    $article['pr'] ?? 0,
+                    $article['prix_vente'] ?? 0,
+                    $article['quantite_totale'] ?? 0,
+                    $article['statut'] ?? 'actif',
+                    $article['unite_mesure'] ?? 'Piece',
+                    $article['stock_minimal'] ?? 0,
+                    $article['stock_maximal'] ?? 0,
+                    $article['poids_kg'] ?? '',
+                    $article['couleur'] ?? '',
+                    $article['nom_categorie'] ?? '',
+                    $article['nom_fournisseurs'] ?? '',
+                    $article['notes_internes'] ?? ''
+                ], ';');
+            }
+
+            fclose($output);
+            exit();
+        } catch (Exception $e) {
+            error_log("Erreur export CSV : " . $e->getMessage());
+            die("Erreur lors de l'export.");
         }
-        fclose($out);
-        exit();
     }
 
-    // ----------------------------------------------------------------
-    // Import CSV
-    // ----------------------------------------------------------------
+    // ============================================================
+    // IMPORT CSV (basique - à améliorer)
+    // ============================================================
 
-    public function import(array $data): array {
+    public function importCSV(array $files): array {
         if (!hasPermission('articles', 'create')) {
             die("Accès refusé.");
         }
-        $error   = null;
-        $success = null;
 
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            CsrfMiddleware::verify();
-            $userId = (int)($_SESSION['user_id'] ?? 0);
+        $error = null;
+        $imported = 0;
+        $userId = $_SESSION['user_id'] ?? null;
 
-            if (empty($_FILES['csv_file']['name'])) {
-                $error = "Veuillez sélectionner un fichier CSV.";
+        if (!$userId) {
+            $error = "Utilisateur non authentifié.";
+            return ['view' => 'articles/import', 'data' => ['error' => $error]];
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($files['csv_file'])) {
+            if ($files['csv_file']['error'] !== UPLOAD_ERR_OK) {
+                $error = "Erreur lors du téléchargement du fichier.";
             } else {
-                $file = $_FILES['csv_file'];
-                $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                if ($ext !== 'csv') {
-                    $error = "Seuls les fichiers .csv sont acceptés.";
-                } elseif ($file['size'] > 5 * 1024 * 1024) {
-                    $error = "Le fichier ne doit pas dépasser 5 Mo.";
-                } else {
-                    $count = 0;
-                    $errors = [];
-                    if (($handle = fopen($file['tmp_name'], 'r')) !== false) {
-                        // Sauter l'en-tête
-                        fgetcsv($handle, 0, ';');
-                        while (($row = fgetcsv($handle, 0, ';')) !== false) {
-                            if (count($row) < 4) continue;
-                            // Résoudre le fournisseur par nom (colonne 13)
-                            $nomFournisseur = trim($row[13] ?? '');
-                            $fournisseurId  = $this->resolveFournisseurId($nomFournisseur);
-                            if (!$fournisseurId) {
-                                $errors[] = "Ligne ignorée (" . trim($row[2] ?? '') . ") : fournisseur introuvable « {$nomFournisseur} ».";
-                                continue;
-                            }
-                            $rowData = [
-                                'nom_art'        => trim($row[2] ?? ''),
-                                'sku'            => trim($row[1] ?? ''),
-                                'prix_revient'   => (float)str_replace(',', '.', $row[3] ?? 0),
-                                'pr'             => (float)str_replace(',', '.', $row[3] ?? 0),
-                                'prix_vente'     => (float)str_replace(',', '.', $row[4] ?? 0),
-                                'fournisseur_id' => $fournisseurId,
-                                'statut'         => $row[6] ?? 'actif',
-                                'unite_mesure'   => trim($row[7] ?? 'Piece'),
-                                'stock_minimal'  => (int)($row[8] ?? 0),
-                                'stock_maximal'  => (int)($row[9] ?? 0),
-                            ];
-                            if (empty($rowData['nom_art'])) continue;
-                            try {
-                                $this->articleModel->create($rowData, $userId);
-                                $count++;
-                            } catch (PDOException $e) {
-                                $errors[] = "Ligne ignorée ({$rowData['nom_art']}) : " . $e->getMessage();
-                            }
+                try {
+                    $file = fopen($files['csv_file']['tmp_name'], 'r');
+                    
+                    // Ignorer BOM si présent
+                    $bom = fread($file, 3);
+                    if ($bom !== chr(0xEF) . chr(0xBB) . chr(0xBF)) {
+                        rewind($file);
+                    }
+
+                    // Ignorer l'en-tête
+                    fgetcsv($file, 1000, ';');
+
+                    while (($row = fgetcsv($file, 1000, ';')) !== false) {
+                        if (count($row) < 3 || empty($row[1])) continue;
+
+                        $articleData = [
+                            'nom_art' => $row[2] ?? '',
+                            'sku' => $row[1] ?? null,
+                            'pr' => floatval($row[3] ?? 0),
+                            'prix_vente' => floatval($row[4] ?? 0),
+                            'fournisseur_id' => 1, // À adapter selon import
+                            'quantite_totale' => intval($row[5] ?? 0),
+                            'statut' => $row[6] ?? 'actif',
+                            'unite_mesure' => $row[7] ?? 'Piece',
+                            'stock_minimal' => intval($row[8] ?? 0),
+                            'stock_maximal' => intval($row[9] ?? 0),
+                            'poids_kg' => $row[10] ?? null,
+                            'couleur' => $row[11] ?? null,
+                            'notes_internes' => $row[14] ?? null
+                        ];
+
+                        try {
+                            $this->articleModel->create($articleData, $userId);
+                            $imported++;
+                        } catch (PDOException $e) {
+                            error_log("Erreur import ligne : " . $e->getMessage());
                         }
-                        fclose($handle);
                     }
-                    $success = "{$count} article(s) importé(s) avec succès.";
-                    if ($errors) {
-                        $success .= " " . count($errors) . " erreur(s) : " . implode('; ', array_slice($errors, 0, 3));
-                    }
+
+                    fclose($file);
+                } catch (Exception $e) {
+                    $error = "Erreur lors du traitement du fichier : " . $e->getMessage();
+                    error_log($error);
                 }
             }
         }
@@ -430,76 +357,9 @@ class ArticleController {
         return [
             'view' => 'articles/import',
             'data' => [
-                'error'      => $error,
-                'success'    => $success,
-                'csrf_field' => CsrfMiddleware::field(),
-            ],
+                'error' => $error,
+                'imported' => $imported
+            ]
         ];
-    }
-
-    // ----------------------------------------------------------------
-    // Helpers
-    // ----------------------------------------------------------------
-
-    private function resolveFournisseurId(string $nom): ?int {
-        if ($nom === '') return null;
-        try {
-            $stmt = $this->db->prepare(
-                "SELECT id_fournisseurs FROM fournisseurs WHERE nom_fournisseurs = ? LIMIT 1"
-            );
-            $stmt->execute([$nom]);
-            $row = $stmt->fetch(PDO::FETCH_ASSOC);
-            return $row ? (int)$row['id_fournisseurs'] : null;
-        } catch (PDOException $e) {
-            return null;
-        }
-    }
-
-    private function getFournisseurs(): array {
-        try {
-            $stmt = $this->db->query("SELECT id_fournisseurs, nom_fournisseurs FROM fournisseurs ORDER BY nom_fournisseurs ASC");
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            error_log("Erreur récupération fournisseurs : " . $e->getMessage());
-            return [];
-        }
-    }
-
-    private function handleImageUpload(array $file, int $articleId): ?string {
-        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        $maxSize      = 2 * 1024 * 1024; // 2 Mo
-
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-            return null;
-        }
-        if (!in_array($file['type'], $allowedTypes, true)) {
-            return null;
-        }
-        if ($file['size'] > $maxSize) {
-            return null;
-        }
-
-        // Vérification par finfo
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime  = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
-        if (!in_array($mime, $allowedTypes, true)) {
-            return null;
-        }
-
-        $uploadDir = __DIR__ . '/../public/img/articles/';
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-
-        $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
-        $filename = 'article_' . $articleId . '_' . time() . '.' . $ext;
-        $dest     = $uploadDir . $filename;
-
-        if (!move_uploaded_file($file['tmp_name'], $dest)) {
-            return null;
-        }
-
-        return 'img/articles/' . $filename;
     }
 }

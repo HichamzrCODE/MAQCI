@@ -2,6 +2,9 @@
 require __DIR__.'/../includes/licence_check.php';
 session_start();
 
+// ====== CONFIGURATION CENTRALISÉE ======
+$appConfig = require __DIR__ . '/../config/app.php';
+
 // Autoloading des classes
 spl_autoload_register(function ($classname) {
     $paths = ['../models/', '../controllers/'];
@@ -14,8 +17,8 @@ spl_autoload_register(function ($classname) {
     }
 });
 
-// Configuration de la base de données
-$dbConfig = require '../config/database.php';
+// ====== CONNEXION BASE DE DONNÉES ======
+$dbConfig = $appConfig['database'];
 
 try {
     $db = new PDO(
@@ -28,11 +31,8 @@ try {
     die("Erreur de connexion à la base de données : " . $e->getMessage());
 }
 
-
-// Routage principal
-$action = $_GET['action'] ?? 'home'; // Action par défaut
-
-// Liste des actions accessibles sans connexion
+// ====== ROUTAGE PRINCIPAL ======
+$action = $_GET['action'] ?? 'home';
 $publicActions = ['home', 'login'];
 
 if (!isset($_SESSION['user_id']) && !in_array($action, $publicActions)) {
@@ -42,7 +42,7 @@ if (!isset($_SESSION['user_id']) && !in_array($action, $publicActions)) {
 
 switch ($action) {
 
-        // --- UTILISATEURS (ADMIN SEULEMENT) ---
+    // --- UTILISATEURS (ADMIN SEULEMENT) ---
     case 'users':
         if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
         $controller = new UsersController($db);
@@ -67,17 +67,13 @@ switch ($action) {
         $controller = new UsersController($db);
         $controller->delete((int)$id);
         exit();
-        break;
     case 'users/disconnect':
-            if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
-       $id = $_GET['id'] ?? null;
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
+        $id = $_GET['id'] ?? null;
         if ($id === null || !is_numeric($id)) die("ID utilisateur invalide.");
         $controller = new UsersController($db);
         $controller->disconnect((int)$id);
         exit();
-        break;
-
-
 
     // --- ACCUEIL & AUTHENTIFICATION ---
     case 'home':
@@ -124,9 +120,7 @@ switch ($action) {
         $term = $_GET['term'] ?? '';
         $controller = new ClientController($db);
         $controller->search(['term' => $term]);
-             // La méthode doit faire echo json_encode et exit
-         exit();
-         break;
+        exit();
 
     // --- FOURNISSEURS ---
     case 'fournisseurs':
@@ -159,8 +153,7 @@ switch ($action) {
         $term = $_GET['term'] ?? '';
         $controller = new FournisseurController($db);
         $controller->search(['term' => $term]);
-         exit();
-
+        exit();
 
     // --- ARTICLES ---
     case 'articles':
@@ -184,47 +177,65 @@ switch ($action) {
         $controller = new ArticleController($db);
         $controller->delete((int)$id);
         exit();
-        break;
     case 'articles/search':
-       $term = $_GET['term'] ?? '';
-       $controller = new ArticleController($db);
-       $controller->search(['term' => $term]);
-       exit();
-       break;
+        $term = $_GET['term'] ?? '';
+        $controller = new ArticleController($db);
+        $controller->search(['term' => $term]);
+        exit();
     case 'articles/show':
         $id = $_GET['id'] ?? null;
         if ($id === null || !is_numeric($id)) die("ID de l'article est invalide.");
         $controller = new ArticleController($db);
         $viewData = $controller->show((int)$id);
         break;
-    case 'articles/historique-prix':
-        $id = $_GET['id'] ?? null;
-        if ($id === null || !is_numeric($id)) die("ID de l'article est invalide.");
-        $controller = new ArticleController($db);
-        $controller->historiquePrix((int)$id);
-        exit();
-        break;
-    case 'articles/stock-par-depot':
-        $id = $_GET['id'] ?? null;
-        if ($id === null || !is_numeric($id)) die("ID de l'article est invalide.");
-        $controller = new ArticleController($db);
-        $controller->stockParDepot((int)$id);
-        exit();
-        break;
     case 'articles/export':
         $controller = new ArticleController($db);
-        $controller->export();
+        $controller->exportCSV();
         exit();
-        break;
     case 'articles/import':
         $controller = new ArticleController($db);
-        $viewData = $controller->import($_POST);
+        $viewData = $controller->importCSV($_FILES);
         break;
-    // --- DEPOTS ---
+
+    // --- CATÉGORIES ---
+    case 'categories':
+    case 'categories/index':
+        $controller = new CategoryController($db);
+        $viewData = $controller->index($_GET);
+        break;
+    case 'categories/create':
+        $controller = new CategoryController($db);
+        $viewData = $controller->create($_POST);
+        break;
+    case 'categories/edit':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de catégorie invalide.");
+        $controller = new CategoryController($db);
+        $viewData = $controller->edit((int)$id, $_POST);
+        break;
+    case 'categories/delete':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de catégorie invalide.");
+        $controller = new CategoryController($db);
+        $controller->delete((int)$id);
+        exit();
+    case 'categories/show':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de catégorie invalide.");
+        $controller = new CategoryController($db);
+        $viewData = $controller->show((int)$id);
+        break;
+    case 'categories/search':
+        $term = $_GET['term'] ?? '';
+        $controller = new CategoryController($db);
+        $controller->search(['term' => $term]);
+        exit();
+
+    // --- DÉPÔTS ---
     case 'depots':
     case 'depots/index':
         $controller = new DepotController($db);
-        $viewData = $controller->index();
+        $viewData = $controller->index($_GET);
         break;
     case 'depots/create':
         $controller = new DepotController($db);
@@ -232,11 +243,27 @@ switch ($action) {
         break;
     case 'depots/edit':
         $id = $_GET['id'] ?? null;
-        if ($id === null || !is_numeric($id)) die("ID de depot invalide.");
+        if ($id === null || !is_numeric($id)) die("ID de dépôt invalide.");
         $controller = new DepotController($db);
         $viewData = $controller->edit((int)$id, $_POST);
         break;
-
+    case 'depots/delete':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de dépôt invalide.");
+        $controller = new DepotController($db);
+        $controller->delete((int)$id);
+        exit();
+    case 'depots/show':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de dépôt invalide.");
+        $controller = new DepotController($db);
+        $viewData = $controller->show((int)$id);
+        break;
+    case 'depots/search':
+        $term = $_GET['term'] ?? '';
+        $controller = new DepotController($db);
+        $controller->search(['term' => $term]);
+        exit();
 
     // --- DEVIS ---
     case 'devis':
@@ -281,7 +308,6 @@ switch ($action) {
             echo json_encode(['success' => false, 'message' => 'Méthode de requête incorrecte.']);
             exit();
         }
-        break;
     case 'devis/searchArticles':
         $term = $_GET['term'] ?? '';
         $controller = new DevisController($db);
@@ -295,7 +321,6 @@ switch ($action) {
         $controller = new DevisController($db);
         $controller->update((int)$id, $_POST);
         exit();
-        break;
     case 'devis/getClientArticlePrice':
         $clientId = $_GET['client_id'] ?? null;
         $articleId = $_GET['article_id'] ?? null;
@@ -307,20 +332,18 @@ switch ($action) {
         $controller = new DevisController($db);
         $controller->getArticlePrice((int)$clientId, (int)$articleId);
         exit();
-        break;
     case 'devis/search':
         $controller = new DevisController($db);
         $viewData = $controller->search($_POST);
         break;
-
     case 'devis/pdf_wkhtml':
-    $id = $_GET['id'] ?? null;
-    if ($id === null || !is_numeric($id)) die("ID de devis invalide.");
-    $controller = new DevisController($db);
-    $controller->pdfWkhtml((int)$id);
-    exit();
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de devis invalide.");
+        $controller = new DevisController($db);
+        $controller->pdfWkhtml((int)$id);
+        exit();
 
-    // --- CREDIT ---
+    // --- CRÉDIT ---
     case 'credit':
         $controller = new CreditController($db);
         $viewData = $controller->index();
@@ -332,7 +355,7 @@ switch ($action) {
         echo json_encode($data);
         exit();
 
-    // --- RELEVES ---
+    // --- RELEVÉS CLIENTS ---
     case 'releve':
         $controller = new ReleveController($db);
         $viewData = $controller->index();
@@ -372,40 +395,40 @@ switch ($action) {
         $viewData = $controller->extrait((int)$id, $date_debut, $date_fin);
         break;
 
-// --- FS (RELEVES FOURNISSEUR) ---
-case 'fs':
-    $controller = new FsReleveController($db);
-    $viewData = $controller->index();
-    break;
-case 'fs/create':
-    $controller = new FsReleveController($db);
-    $viewData = $controller->create($_POST);
-    break;
-case 'fs/edit':
-    if (!isset($_GET['id']) || !is_numeric($_GET['id'])) die("ID de relevé fournisseur invalide.");
-    $controller = new FsReleveController($db);
-    $viewData = $controller->edit((int)$_GET['id'], $_POST);
-    break;
-case 'fs/delete':
-    if (!isset($_GET['id']) || !is_numeric($_GET['id'])) die("ID de relevé fournisseur invalide.");
-    $controller = new FsReleveController($db);
-    $controller->delete((int)$_GET['id']);
-    exit();
-case 'fs/show':
-    if (!isset($_GET['id']) || !is_numeric($_GET['id'])) die("ID de relevé fournisseur invalide.");
-    $controller = new FsReleveController($db);
-    $viewData = $controller->show((int)$_GET['id']);
-    break;
-case 'fs/extrait':
-    $id = $_GET['id'] ?? null;
-    $date_debut = $_GET['date_debut'] ?? null;
-    $date_fin = $_GET['date_fin'] ?? null;
-    if ($id === null || !is_numeric($id)) die("ID de relevé fournisseur invalide.");
-    $controller = new FsReleveController($db);
-    $viewData = $controller->extrait((int)$id, $date_debut, $date_fin);
-    break;
+    // --- RELEVÉS FOURNISSEURS ---
+    case 'fs':
+        $controller = new FsReleveController($db);
+        $viewData = $controller->index();
+        break;
+    case 'fs/create':
+        $controller = new FsReleveController($db);
+        $viewData = $controller->create($_POST);
+        break;
+    case 'fs/edit':
+        if (!isset($_GET['id']) || !is_numeric($_GET['id'])) die("ID de relevé fournisseur invalide.");
+        $controller = new FsReleveController($db);
+        $viewData = $controller->edit((int)$_GET['id'], $_POST);
+        break;
+    case 'fs/delete':
+        if (!isset($_GET['id']) || !is_numeric($_GET['id'])) die("ID de relevé fournisseur invalide.");
+        $controller = new FsReleveController($db);
+        $controller->delete((int)$_GET['id']);
+        exit();
+    case 'fs/show':
+        if (!isset($_GET['id']) || !is_numeric($_GET['id'])) die("ID de relevé fournisseur invalide.");
+        $controller = new FsReleveController($db);
+        $viewData = $controller->show((int)$_GET['id']);
+        break;
+    case 'fs/extrait':
+        $id = $_GET['id'] ?? null;
+        $date_debut = $_GET['date_debut'] ?? null;
+        $date_fin = $_GET['date_fin'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de relevé fournisseur invalide.");
+        $controller = new FsReleveController($db);
+        $viewData = $controller->extrait((int)$id, $date_debut, $date_fin);
+        break;
 
-    // --- VOITURE ---
+    // --- VOITURES ---
     case 'voiture':
         $controller = new VoitureController($db);
         $viewData = $controller->index();
@@ -426,37 +449,31 @@ case 'fs/extrait':
         $controller = new VoitureController($db);
         $controller->delete((int)$id);
         exit();
-        break;
 
-// TABLEAU DE BORD
+    // --- TABLEAU DE BORD ---
     case 'dashboard':
         $controller = new DashboardController($db);
         $viewData = $controller->index();
         break;
 
-
-        
-// SAUVEGARDE
+    // --- SAUVEGARDE ---
     case 'sauvegarde':
-    if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
-    $controller = new SauvegardeController($db);
-    $controller->index();
-    exit();
-
-case 'sauvegarde/backup':
-    if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') die("Méthode non autorisée.");
-    $controller = new SauvegardeController($db);
-    $controller->backup();
-    exit();
-
-case 'sauvegarde/download':
-    if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
-    $file = $_GET['file'] ?? '';
-    $controller = new SauvegardeController($db);
-    $controller->download($file);
-    exit();
-
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
+        $controller = new SauvegardeController($db);
+        $controller->index();
+        exit();
+    case 'sauvegarde/backup':
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') die("Méthode non autorisée.");
+        $controller = new SauvegardeController($db);
+        $controller->backup();
+        exit();
+    case 'sauvegarde/download':
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
+        $file = $_GET['file'] ?? '';
+        $controller = new SauvegardeController($db);
+        $controller->download($file);
+        exit();
 
     // --- ERREUR PAR DÉFAUT ---
     default:
@@ -464,7 +481,7 @@ case 'sauvegarde/download':
         break;
 }
 
-// Chargement de la vue
+// ====== CHARGEMENT DE LA VUE ======
 $view = $viewData['view'] ?? 'error';
 $data = $viewData['data'] ?? [];
 
