@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS depots (
     email VARCHAR(100) NULL,
     statut ENUM('actif','inactif') DEFAULT 'actif',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (responsable_id) REFERENCES users(id_users) ON DELETE SET NULL,
+    FOREIGN KEY (responsable_id) REFERENCES users(id_users),
     INDEX idx_nom (nom),
     INDEX idx_statut (statut)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS articles_prix_historique (
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     raison VARCHAR(255) NULL,
     FOREIGN KEY (article_id) REFERENCES articles(id_articles) ON DELETE CASCADE,
-    FOREIGN KEY (changed_by) REFERENCES users(id_users) ON DELETE SET NULL,
+    FOREIGN KEY (changed_by) REFERENCES users(id_users),
     INDEX idx_article (article_id),
     INDEX idx_date (changed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     ip_address VARCHAR(45) NULL,
     user_agent VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id_users) ON DELETE SET NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id_users),
     INDEX idx_entity (entity_type, entity_id),
     INDEX idx_user (user_id),
     INDEX idx_date (created_at)
