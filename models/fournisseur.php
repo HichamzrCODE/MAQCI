@@ -12,9 +12,9 @@ class fournisseur {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function create(string $nom_fournisseurs, int $userId): int {
-        $stmt = $this->db->prepare("INSERT INTO fournisseurs (nom_fournisseurs, created_by) VALUES (?, ?)");
-        $stmt->execute([$nom_fournisseurs, $userId]);
+    public function create(string $nom_fournisseurs, int $userId, string $email = '', string $telephone = ''): int {
+        $stmt = $this->db->prepare("INSERT INTO fournisseurs (nom_fournisseurs, created_by, email, telephone) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$nom_fournisseurs, $userId, $email ?: null, $telephone ?: null]);
         return (int)$this->db->lastInsertId();
     }
 
@@ -25,9 +25,9 @@ class fournisseur {
         return $fournisseurs ?: null;
     }
 
-    public function update(int $id, string $nom_fournisseurs): void {
-        $stmt = $this->db->prepare("UPDATE fournisseurs SET nom_fournisseurs = ? WHERE id_fournisseurs = ?");
-        $stmt->execute([$nom_fournisseurs, $id]);
+    public function update(int $id, string $nom_fournisseurs, string $email = '', string $telephone = ''): void {
+        $stmt = $this->db->prepare("UPDATE fournisseurs SET nom_fournisseurs = ?, email = ?, telephone = ? WHERE id_fournisseurs = ?");
+        $stmt->execute([$nom_fournisseurs, $email ?: null, $telephone ?: null, $id]);
     }
 
     public function delete(int $id_fournisseurs): void {
@@ -49,4 +49,18 @@ public function existsByName($nom_fournisseurs) {
     $stmt->execute([$nom_fournisseurs]);
     return $stmt->fetchColumn() > 0;
 }
+
+    // Nombre d'articles fournis par ce fournisseur
+    public function countArticles(int $fournisseurId): int {
+        $stmt = $this->db->prepare("SELECT COUNT(*) FROM articles WHERE fournisseur_id = ?");
+        $stmt->execute([$fournisseurId]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    // Prix moyen d'achat des articles de ce fournisseur
+    public function getPrixMoyenAchat(int $fournisseurId): float {
+        $stmt = $this->db->prepare("SELECT COALESCE(AVG(pr), 0) FROM articles WHERE fournisseur_id = ?");
+        $stmt->execute([$fournisseurId]);
+        return (float)$stmt->fetchColumn();
+    }
 }

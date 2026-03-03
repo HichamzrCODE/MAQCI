@@ -1,4 +1,5 @@
 <?php include '..\views\layout.php'; ?>
+<?php require_once __DIR__ . '/../../includes/permissions.php'; ?>
 
 <div class="container">
     <h1 style="margin-top: 30px;">Ajouter un client</h1>
@@ -26,6 +27,14 @@
             <option value="facture">Entreprise (Facture)</option>
          </select>
        </div>
+
+        <?php if (hasPermission('clients', 'edit')): ?>
+        <div class="form-group">
+            <label for="payment_delay">Délai de paiement (jours) :</label>
+            <input type="number" class="form-control" id="payment_delay" name="payment_delay" value="30" min="1" max="365">
+        </div>
+        <?php endif; ?>
+
         <button type="submit" class="btn btn-primary">Ajouter</button>
     </form>
 </div>
