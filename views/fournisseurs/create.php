@@ -10,7 +10,14 @@
             <label for="nom">Nom:</label>
             <input type="text" class="form-control" id="nom_fournisseurs" name="nom_fournisseurs">
         </div>
-       
+        <div class="form-group">
+            <label for="email">Email :</label>
+            <input type="email" class="form-control" id="email" name="email">
+        </div>
+        <div class="form-group">
+            <label for="telephone">Téléphone :</label>
+            <input type="text" class="form-control" id="telephone" name="telephone">
+        </div>
         <button type="submit" class="btn btn-primary">Ajouter</button>
     </form>
 </div>
