@@ -191,7 +191,7 @@ switch ($action) {
        $controller->search(['term' => $term]);
        exit();
        break;
-    case 'articles/show':
+  case 'articles/show':
         $id = $_GET['id'] ?? null;
         if ($id === null || !is_numeric($id)) die("ID de l'article est invalide.");
         $controller = new ArticleController($db);
@@ -220,23 +220,29 @@ switch ($action) {
         $controller = new ArticleController($db);
         $viewData = $controller->import($_POST);
         break;
+    
     // --- DEPOTS ---
-    case 'depots':
-    case 'depots/index':
-        $controller = new DepotController($db);
-        $viewData = $controller->index();
-        break;
-    case 'depots/create':
-        $controller = new DepotController($db);
-        $viewData = $controller->create($_POST);
-        break;
-    case 'depots/edit':
+case 'depots':
+case 'depots/index':
+    $controller = new DepotController($db);
+    $viewData = $controller->index();
+    break;
+case 'depots/create':
+    $controller = new DepotController($db);
+    $viewData = $controller->create($_POST);
+    break;
+case 'depots/edit':
+    $id = $_GET['id'] ?? null;
+    if ($id === null || !is_numeric($id)) die("ID de depot invalide.");
+    $controller = new DepotController($db);
+    $viewData = $controller->edit((int)$id, $_POST);
+    break;
+        case 'depots/show':
         $id = $_GET['id'] ?? null;
         if ($id === null || !is_numeric($id)) die("ID de depot invalide.");
         $controller = new DepotController($db);
-        $viewData = $controller->edit((int)$id, $_POST);
+        $viewData = $controller->show((int)$id);
         break;
-
 
     // --- DEVIS ---
     case 'devis':

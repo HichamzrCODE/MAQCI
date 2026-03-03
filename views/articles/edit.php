@@ -104,8 +104,8 @@
             <div class="card-body">
                 <div class="form-row">
                     <div class="form-group col-md-4">
-                        <label for="prix_revient">Prix de revient <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" min="0.01" class="form-control" id="prix_revient" name="prix_revient"
+                        <label for="pr">Prix de revient <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" min="0.01" class="form-control" id="prix_revient" name="pr"
                                value="<?= htmlspecialchars($article['prix_revient_display'] ?? $article['prix_revient'] ?? $article['pr'] ?? ''); ?>" required>
                     </div>
                     <div class="form-group col-md-4">

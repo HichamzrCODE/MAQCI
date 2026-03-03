@@ -7,17 +7,9 @@ class Article {
         $this->db = $db;
     }
 
-    // ----------------------------------------------------------------
-    // Helpers internes
-    // ----------------------------------------------------------------
-
     private function resolvePr(array $data): float {
-        return (float)($data['prix_revient'] ?? $data['pr'] ?? 0);
+        return (float)($data['pr'] ?? 0);
     }
-
-    // ----------------------------------------------------------------
-    // Lecture / liste
-    // ----------------------------------------------------------------
 
     public function getTotalCount(): int {
         $stmt = $this->db->query("SELECT COUNT(*) FROM articles WHERE deleted_at IS NULL");
@@ -26,8 +18,7 @@ class Article {
 
     public function getLimited(int $limit = 50): array {
         $stmt = $this->db->prepare(
-            "SELECT a.*, f.nom_fournisseurs,
-                    COALESCE(a.prix_revient, a.pr) AS prix_revient_display
+            "SELECT a.*, f.nom_fournisseurs
              FROM articles a
              INNER JOIN fournisseurs f ON a.fournisseur_id = f.id_fournisseurs
              WHERE a.deleted_at IS NULL
@@ -41,8 +32,7 @@ class Article {
     public function searchFull(string $term, int $limit = 50): array {
         $like = '%' . $term . '%';
         $stmt = $this->db->prepare(
-            "SELECT a.*, f.nom_fournisseurs,
-                    COALESCE(a.prix_revient, a.pr) AS prix_revient_display
+            "SELECT a.*, f.nom_fournisseurs
              FROM articles a
              INNER JOIN fournisseurs f ON a.fournisseur_id = f.id_fournisseurs
              WHERE a.deleted_at IS NULL
@@ -59,8 +49,7 @@ class Article {
 
     public function getAll(): array {
         $stmt = $this->db->query(
-            "SELECT a.*, f.nom_fournisseurs,
-                    COALESCE(a.prix_revient, a.pr) AS prix_revient_display
+            "SELECT a.*, f.nom_fournisseurs
              FROM articles a
              INNER JOIN fournisseurs f ON a.fournisseur_id = f.id_fournisseurs
              WHERE a.deleted_at IS NULL
@@ -69,11 +58,9 @@ class Article {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // Jointure fournisseurs aussi pour l'affichage détaillé
     public function findById(int $id): ?array {
         $stmt = $this->db->prepare(
             "SELECT a.*,
-                    COALESCE(a.prix_revient, a.pr) AS prix_revient_display,
                     f.nom_fournisseurs,
                     fa.nom_fournisseurs AS nom_fournisseur_alt,
                     c.nom AS nom_categorie,
@@ -92,23 +79,20 @@ class Article {
         return $row ?: null;
     }
 
-    // ----------------------------------------------------------------
-    // Création
-    // ----------------------------------------------------------------
-
+    // ✅ CORRIGÉ : INSERT ET EXECUTE SYNCHRONISÉS
     public function create(array $data, int $userId): int {
         $stmt = $this->db->prepare(
             "INSERT INTO articles
-                (nom_art, sku, pr, prix_revient, prix_vente,
+                (nom_art, sku, pr, prix_vente,
                  fournisseur_id, fournisseur_alternatif_id,
                  poids_kg, longueur_cm, largeur_cm, hauteur_cm, couleur,
                  unite_mesure, stock_minimal, stock_maximal, quantite_totale,
                  categorie_id, statut, notes_internes, created_by)
              VALUES
-                (:nom_art, :sku, :pr, :prix_revient, :prix_vente,
+                (:nom_art, :sku, :pr, :prix_vente,
                  :fournisseur_id, :fournisseur_alternatif_id,
                  :poids_kg, :longueur_cm, :largeur_cm, :hauteur_cm, :couleur,
-                 :unite_mesure, :stock_minimal, :stock_maximal, 0,
+                 :unite_mesure, :stock_minimal, :stock_maximal, :quantite_totale,
                  :categorie_id, :statut, :notes_internes, :created_by)"
         );
         $pr = $this->resolvePr($data);
@@ -116,18 +100,18 @@ class Article {
             ':nom_art'                   => $data['nom_art'],
             ':sku'                       => ($data['sku'] ?? '') !== '' ? $data['sku'] : null,
             ':pr'                        => $pr,
-            ':prix_revient'              => $pr,
             ':prix_vente'                => (float)($data['prix_vente'] ?? 0),
             ':fournisseur_id'            => (int)$data['fournisseur_id'],
             ':fournisseur_alternatif_id' => ($data['fournisseur_alternatif_id'] ?? '') !== '' ? (int)$data['fournisseur_alternatif_id'] : null,
-            ':poids_kg'                  => ($data['poids_kg'] ?? '') !== '' ? $data['poids_kg'] : null,
-            ':longueur_cm'               => ($data['longueur_cm'] ?? '') !== '' ? $data['longueur_cm'] : null,
-            ':largeur_cm'                => ($data['largeur_cm'] ?? '') !== '' ? $data['largeur_cm'] : null,
-            ':hauteur_cm'                => ($data['hauteur_cm'] ?? '') !== '' ? $data['hauteur_cm'] : null,
+            ':poids_kg'                  => ($data['poids_kg'] ?? '') !== '' ? (float)$data['poids_kg'] : null,
+            ':longueur_cm'               => ($data['longueur_cm'] ?? '') !== '' ? (float)$data['longueur_cm'] : null,
+            ':largeur_cm'                => ($data['largeur_cm'] ?? '') !== '' ? (float)$data['largeur_cm'] : null,
+            ':hauteur_cm'                => ($data['hauteur_cm'] ?? '') !== '' ? (float)$data['hauteur_cm'] : null,
             ':couleur'                   => ($data['couleur'] ?? '') !== '' ? $data['couleur'] : null,
             ':unite_mesure'              => ($data['unite_mesure'] ?? '') !== '' ? $data['unite_mesure'] : 'Piece',
             ':stock_minimal'             => (int)($data['stock_minimal'] ?? 0),
             ':stock_maximal'             => (int)($data['stock_maximal'] ?? 0),
+            ':quantite_totale'           => (int)($data['quantite_totale'] ?? 0),
             ':categorie_id'              => ($data['categorie_id'] ?? '') !== '' ? (int)$data['categorie_id'] : null,
             ':statut'                    => $data['statut'] ?? 'actif',
             ':notes_internes'            => ($data['notes_internes'] ?? '') !== '' ? $data['notes_internes'] : null,
@@ -136,10 +120,6 @@ class Article {
         return (int)$this->db->lastInsertId();
     }
 
-    // ----------------------------------------------------------------
-    // Modification
-    // ----------------------------------------------------------------
-
     public function update(int $id, array $data, int $userId): void {
         $pr = $this->resolvePr($data);
         $stmt = $this->db->prepare(
@@ -147,7 +127,6 @@ class Article {
                 nom_art = :nom_art,
                 sku = :sku,
                 pr = :pr,
-                prix_revient = :prix_revient,
                 prix_vente = :prix_vente,
                 fournisseur_id = :fournisseur_id,
                 fournisseur_alternatif_id = :fournisseur_alternatif_id,
@@ -159,6 +138,7 @@ class Article {
                 unite_mesure = :unite_mesure,
                 stock_minimal = :stock_minimal,
                 stock_maximal = :stock_maximal,
+                quantite_totale = :quantite_totale,
                 categorie_id = :categorie_id,
                 statut = :statut,
                 notes_internes = :notes_internes,
@@ -169,18 +149,18 @@ class Article {
             ':nom_art'                   => $data['nom_art'],
             ':sku'                       => ($data['sku'] ?? '') !== '' ? $data['sku'] : null,
             ':pr'                        => $pr,
-            ':prix_revient'              => $pr,
             ':prix_vente'                => (float)($data['prix_vente'] ?? 0),
             ':fournisseur_id'            => (int)$data['fournisseur_id'],
             ':fournisseur_alternatif_id' => ($data['fournisseur_alternatif_id'] ?? '') !== '' ? (int)$data['fournisseur_alternatif_id'] : null,
-            ':poids_kg'                  => ($data['poids_kg'] ?? '') !== '' ? $data['poids_kg'] : null,
-            ':longueur_cm'               => ($data['longueur_cm'] ?? '') !== '' ? $data['longueur_cm'] : null,
-            ':largeur_cm'                => ($data['largeur_cm'] ?? '') !== '' ? $data['largeur_cm'] : null,
-            ':hauteur_cm'                => ($data['hauteur_cm'] ?? '') !== '' ? $data['hauteur_cm'] : null,
+            ':poids_kg'                  => ($data['poids_kg'] ?? '') !== '' ? (float)$data['poids_kg'] : null,
+            ':longueur_cm'               => ($data['longueur_cm'] ?? '') !== '' ? (float)$data['longueur_cm'] : null,
+            ':largeur_cm'                => ($data['largeur_cm'] ?? '') !== '' ? (float)$data['largeur_cm'] : null,
+            ':hauteur_cm'                => ($data['hauteur_cm'] ?? '') !== '' ? (float)$data['hauteur_cm'] : null,
             ':couleur'                   => ($data['couleur'] ?? '') !== '' ? $data['couleur'] : null,
             ':unite_mesure'              => ($data['unite_mesure'] ?? '') !== '' ? $data['unite_mesure'] : 'Piece',
             ':stock_minimal'             => (int)($data['stock_minimal'] ?? 0),
             ':stock_maximal'             => (int)($data['stock_maximal'] ?? 0),
+            ':quantite_totale'           => (int)($data['quantite_totale'] ?? 0),
             ':categorie_id'              => ($data['categorie_id'] ?? '') !== '' ? (int)$data['categorie_id'] : null,
             ':statut'                    => $data['statut'] ?? 'actif',
             ':notes_internes'            => ($data['notes_internes'] ?? '') !== '' ? $data['notes_internes'] : null,
@@ -189,10 +169,6 @@ class Article {
         ]);
     }
 
-    // ----------------------------------------------------------------
-    // Suppression (soft delete)
-    // ----------------------------------------------------------------
-
     public function softDelete(int $id, int $userId): void {
         $stmt = $this->db->prepare(
             "UPDATE articles SET deleted_at = NOW(), updated_by = ? WHERE id_articles = ?"
@@ -200,15 +176,10 @@ class Article {
         $stmt->execute([$userId, $id]);
     }
 
-    /** Suppression physique (rétrocompatibilité) */
     public function delete(int $id): void {
         $stmt = $this->db->prepare("DELETE FROM articles WHERE id_articles = ?");
         $stmt->execute([$id]);
     }
-
-    // ----------------------------------------------------------------
-    // Images
-    // ----------------------------------------------------------------
 
     public function updateImage(int $id, string $imagePath, int $userId): void {
         $stmt = $this->db->prepare(
@@ -217,7 +188,44 @@ class Article {
         $stmt->execute([$imagePath, $userId, $id]);
     }
 
-    // ----------------------------------------------------------------
+    public function searchByName(string $term): array {
+        $like = '%' . $term . '%';
+        $stmt = $this->db->prepare(
+            "SELECT a.id_articles, a.nom_art, a.pr, f.nom_fournisseurs
+             FROM articles a
+             INNER JOIN fournisseurs f ON a.fournisseur_id = f.id_fournisseurs
+             WHERE a.deleted_at IS NULL AND a.nom_art LIKE ?
+             ORDER BY a.nom_art ASC"
+        );
+        $stmt->execute([$like]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getAllForExport(): array {
+        $stmt = $this->db->query(
+            "SELECT a.id_articles, a.sku, a.nom_art, a.pr,
+                    a.prix_vente, a.quantite_totale, a.statut,
+                    a.unite_mesure, a.stock_minimal, a.stock_maximal,
+                    a.poids_kg, a.couleur, a.notes_internes,
+                    f.nom_fournisseurs
+             FROM articles a
+             INNER JOIN fournisseurs f ON a.fournisseur_id = f.id_fournisseurs
+             WHERE a.deleted_at IS NULL
+             ORDER BY a.nom_art ASC"
+        );
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getAllCategories(): array {
+        try {
+            $stmt = $this->db->query("SELECT * FROM categories ORDER BY nom ASC");
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+
+        // ----------------------------------------------------------------
     // Historique prix
     // ----------------------------------------------------------------
 
@@ -236,7 +244,15 @@ class Article {
                  prix_vente_ancien, prix_vente_nouveau, changed_by, raison)
              VALUES (?, ?, ?, ?, ?, ?, ?)"
         );
-        $stmt->execute([$articleId, $prAncien, $prNouveau, $pvAncien, $pvNouveau, $userId, $raison ?: null]);
+        $stmt->execute([
+            $articleId,
+            $prAncien,
+            $prNouveau,
+            $pvAncien,
+            $pvNouveau,
+            $userId,
+            $raison ?: null
+        ]);
     }
 
     public function getPrixHistorique(int $articleId): array {
@@ -250,57 +266,5 @@ class Article {
         );
         $stmt->execute([$articleId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    // ----------------------------------------------------------------
-    // Recherche (rétrocompatibilité)
-    // ----------------------------------------------------------------
-
-    public function searchByName(string $term): array {
-        $like = '%' . $term . '%';
-        $stmt = $this->db->prepare(
-            "SELECT a.id_articles, a.nom_art,
-                    COALESCE(a.prix_revient, a.pr) AS pr,
-                    f.nom_fournisseurs
-             FROM articles a
-             INNER JOIN fournisseurs f ON a.fournisseur_id = f.id_fournisseurs
-             WHERE a.deleted_at IS NULL AND a.nom_art LIKE ?
-             ORDER BY a.nom_art ASC"
-        );
-        $stmt->execute([$like]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    // ----------------------------------------------------------------
-    // Export CSV
-    // ----------------------------------------------------------------
-
-    public function getAllForExport(): array {
-        $stmt = $this->db->query(
-            "SELECT a.id_articles, a.sku, a.nom_art,
-                    COALESCE(a.prix_revient, a.pr) AS prix_revient,
-                    a.prix_vente, a.quantite_totale, a.statut,
-                    a.unite_mesure, a.stock_minimal, a.stock_maximal,
-                    a.poids_kg, a.couleur, a.notes_internes,
-                    f.nom_fournisseurs
-             FROM articles a
-             INNER JOIN fournisseurs f ON a.fournisseur_id = f.id_fournisseurs
-             WHERE a.deleted_at IS NULL
-             ORDER BY a.nom_art ASC"
-        );
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    // ----------------------------------------------------------------
-    // Catégories
-    // ----------------------------------------------------------------
-
-    public function getAllCategories(): array {
-        try {
-            $stmt = $this->db->query("SELECT * FROM categories ORDER BY nom ASC");
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            return [];
-        }
     }
 }

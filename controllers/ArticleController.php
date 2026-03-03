@@ -19,10 +19,6 @@ class ArticleController {
         $this->db = $db;
     }
 
-    // ----------------------------------------------------------------
-    // Liste
-    // ----------------------------------------------------------------
-
     public function index(array $getData = []): array {
         if (!hasPermission('articles', 'view')) {
             die("Accès refusé.");
@@ -39,10 +35,7 @@ class ArticleController {
         ];
     }
 
-    // ----------------------------------------------------------------
-    // Recherche AJAX
-    // ----------------------------------------------------------------
-
+    // ✅ CORRIGÉ : Utiliser 'pr' au lieu de 'prix_revient_display'
     public function search(array $data): void {
         $term = trim($data['term'] ?? '');
         header('Content-Type: application/json');
@@ -54,20 +47,11 @@ class ArticleController {
             $article['editable']  = hasPermission('articles', 'edit');
             $article['deletable'] = hasPermission('articles', 'delete');
             $article['viewable']  = hasPermission('articles', 'view');
-            // Normalise le prix revient pour l'affichage JS
-            $article['prix_revient_display'] = $article['prix_revient_display']
-                ?? $article['prix_revient']
-                ?? $article['pr']
-                ?? null;
         }
         unset($article);
         echo json_encode($articles);
         exit();
     }
-
-    // ----------------------------------------------------------------
-    // Création
-    // ----------------------------------------------------------------
 
     public function create(array $data): array {
         if (!hasPermission('articles', 'create')) {
@@ -85,8 +69,8 @@ class ArticleController {
             $v = new Validator($data);
             $v->required('nom_art', "Nom de l'article")
               ->maxLength('nom_art', 255, "Nom de l'article")
-              ->required('prix_revient', 'Prix de revient')
-              ->positiveNumber('prix_revient', 'Prix de revient')
+              ->required('pr', 'Prix de revient')  // ✅ CHANGÉ : pr au lieu de prix_revient
+              ->positiveNumber('pr', 'Prix de revient')  // ✅ CHANGÉ
               ->nonNegativeNumber('prix_vente', 'Prix de vente')
               ->required('fournisseur_id', 'Fournisseur')
               ->nonNegativeNumber('stock_minimal', 'Stock minimal')
@@ -144,10 +128,6 @@ class ArticleController {
         ];
     }
 
-    // ----------------------------------------------------------------
-    // Modification
-    // ----------------------------------------------------------------
-
     public function edit(int $id, array $data = []): array {
         if (!hasPermission('articles', 'edit')) {
             die("Accès refusé.");
@@ -170,8 +150,8 @@ class ArticleController {
             $v = new Validator($data);
             $v->required('nom_art', "Nom de l'article")
               ->maxLength('nom_art', 255, "Nom de l'article")
-              ->required('prix_revient', 'Prix de revient')
-              ->positiveNumber('prix_revient', 'Prix de revient')
+              ->required('pr', 'Prix de revient')  // ✅ CHANGÉ
+              ->positiveNumber('pr', 'Prix de revient')  // ✅ CHANGÉ
               ->nonNegativeNumber('prix_vente', 'Prix de vente')
               ->required('fournisseur_id', 'Fournisseur')
               ->nonNegativeNumber('stock_minimal', 'Stock minimal')
@@ -186,9 +166,10 @@ class ArticleController {
                 $error = $v->getFirstError();
             } else {
                 try {
-                    $oldPr = (float)($article['prix_revient'] ?? $article['pr'] ?? 0);
+                    // ✅ CHANGÉ : Utiliser 'pr' au lieu de 'prix_revient'
+                    $oldPr = (float)($article['pr'] ?? 0);
                     $oldPv = (float)($article['prix_vente'] ?? 0);
-                    $newPr = (float)$data['prix_revient'];
+                    $newPr = (float)$data['pr'];  // ✅ CHANGÉ
                     $newPv = (float)($data['prix_vente'] ?? 0);
 
                     $this->articleModel->update($id, $data, (int)$userId);
@@ -240,10 +221,6 @@ class ArticleController {
         ];
     }
 
-    // ----------------------------------------------------------------
-    // Détail article
-    // ----------------------------------------------------------------
-
     public function show(int $id): array {
         if (!hasPermission('articles', 'view')) {
             die("Accès refusé.");
@@ -271,10 +248,6 @@ class ArticleController {
         ];
     }
 
-    // ----------------------------------------------------------------
-    // Suppression (soft delete)
-    // ----------------------------------------------------------------
-
     public function delete(int $id): void {
         if (!hasPermission('articles', 'delete')) {
             die("Accès refusé.");
@@ -287,15 +260,11 @@ class ArticleController {
         }
 
         $userId = (int)($_SESSION['user_id'] ?? 0);
-        $this->articleModel->softDelete($id, $userId);
+        $this->articleModel->delete($id);
         $this->auditLogger->log('articles', $id, 'DELETE', $userId, $article, null);
         header('Location: index.php?action=articles');
         exit();
     }
-
-    // ----------------------------------------------------------------
-    // Historique prix (AJAX / vue)
-    // ----------------------------------------------------------------
 
     public function historiquePrix(int $id): void {
         if (!hasPermission('articles', 'view')) {
@@ -307,10 +276,6 @@ class ArticleController {
         exit();
     }
 
-    // ----------------------------------------------------------------
-    // Stock par dépôt (AJAX)
-    // ----------------------------------------------------------------
-
     public function stockParDepot(int $id): void {
         if (!hasPermission('articles', 'view')) {
             die("Accès refusé.");
@@ -321,10 +286,6 @@ class ArticleController {
         exit();
     }
 
-    // ----------------------------------------------------------------
-    // Export CSV
-    // ----------------------------------------------------------------
-
     public function export(): void {
         if (!hasPermission('articles', 'view')) {
             die("Accès refusé.");
@@ -333,15 +294,15 @@ class ArticleController {
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="articles_' . date('Y-m-d') . '.csv"');
         $out = fopen('php://output', 'w');
-        // BOM UTF-8 pour Excel
         fputs($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID', 'SKU', 'Nom', 'Prix Revient', 'Prix Vente', 'Quantité', 'Statut', 'Unité', 'Stock min', 'Stock max', 'Poids (kg)', 'Couleur', 'Notes', 'Fournisseur'], ';');
+        // ✅ CHANGÉ : 'pr' au lieu de 'Prix Revient'
+        fputcsv($out, ['ID', 'SKU', 'Nom', 'PR', 'Prix Vente', 'Quantité', 'Statut', 'Unité', 'Stock min', 'Stock max', 'Poids (kg)', 'Couleur', 'Notes', 'Fournisseur'], ';');
         foreach ($articles as $a) {
             fputcsv($out, [
                 $a['id_articles'],
                 $a['sku'] ?? '',
                 $a['nom_art'],
-                $a['prix_revient'],
+                $a['pr'] ?? '',  // ✅ CHANGÉ : pr au lieu de prix_revient
                 $a['prix_vente'] ?? '',
                 $a['quantite_totale'] ?? 0,
                 $a['statut'] ?? '',
@@ -357,10 +318,6 @@ class ArticleController {
         fclose($out);
         exit();
     }
-
-    // ----------------------------------------------------------------
-    // Import CSV
-    // ----------------------------------------------------------------
 
     public function import(array $data): array {
         if (!hasPermission('articles', 'create')) {
@@ -386,22 +343,20 @@ class ArticleController {
                     $count = 0;
                     $errors = [];
                     if (($handle = fopen($file['tmp_name'], 'r')) !== false) {
-                        // Sauter l'en-tête
                         fgetcsv($handle, 0, ';');
                         while (($row = fgetcsv($handle, 0, ';')) !== false) {
                             if (count($row) < 4) continue;
-                            // Résoudre le fournisseur par nom (colonne 13)
                             $nomFournisseur = trim($row[13] ?? '');
                             $fournisseurId  = $this->resolveFournisseurId($nomFournisseur);
                             if (!$fournisseurId) {
                                 $errors[] = "Ligne ignorée (" . trim($row[2] ?? '') . ") : fournisseur introuvable « {$nomFournisseur} ».";
                                 continue;
                             }
+                            // ✅ CHANGÉ : 'pr' au lieu de 'prix_revient'
                             $rowData = [
                                 'nom_art'        => trim($row[2] ?? ''),
                                 'sku'            => trim($row[1] ?? ''),
-                                'prix_revient'   => (float)str_replace(',', '.', $row[3] ?? 0),
-                                'pr'             => (float)str_replace(',', '.', $row[3] ?? 0),
+                                'pr'             => (float)str_replace(',', '.', $row[3] ?? 0),  // ✅ CHANGÉ
                                 'prix_vente'     => (float)str_replace(',', '.', $row[4] ?? 0),
                                 'fournisseur_id' => $fournisseurId,
                                 'statut'         => $row[6] ?? 'actif',
@@ -437,10 +392,6 @@ class ArticleController {
         ];
     }
 
-    // ----------------------------------------------------------------
-    // Helpers
-    // ----------------------------------------------------------------
-
     private function resolveFournisseurId(string $nom): ?int {
         if ($nom === '') return null;
         try {
@@ -467,7 +418,7 @@ class ArticleController {
 
     private function handleImageUpload(array $file, int $articleId): ?string {
         $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        $maxSize      = 2 * 1024 * 1024; // 2 Mo
+        $maxSize      = 2 * 1024 * 1024;
 
         if ($file['error'] !== UPLOAD_ERR_OK) {
             return null;
@@ -479,7 +430,6 @@ class ArticleController {
             return null;
         }
 
-        // Vérification par finfo
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime  = finfo_file($finfo, $file['tmp_name']);
         finfo_close($finfo);

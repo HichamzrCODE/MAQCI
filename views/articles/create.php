@@ -99,7 +99,7 @@
                 <div class="form-row">
                     <div class="form-group col-md-4">
                         <label for="prix_revient">Prix de revient <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" min="0.01" class="form-control" id="prix_revient" name="prix_revient"
+                        <input type="number" step="0.01" min="0.01" class="form-control" id="prix_revient" name="pr"
                                value="<?= htmlspecialchars($_POST['prix_revient'] ?? ''); ?>" required>
                     </div>
                     <div class="form-group col-md-4">
