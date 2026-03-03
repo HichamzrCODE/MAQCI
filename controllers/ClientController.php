@@ -18,7 +18,18 @@ class ClientController {
             die("Accès refusé.");
         }
         $clients = $this->clientModel->getAll();
-        return ['view' => 'clients/index', 'data' => ['clients' => $clients]];
+        $canViewFinance = isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'manager']);
+        foreach ($clients as &$client) {
+            $id = (int)$client['id_clients'];
+            $client['date_dernier_devis'] = $this->clientModel->getDateDernierDevis($id);
+            if ($canViewFinance) {
+                $client['total_facturise'] = $this->clientModel->getTotalFacturise($id);
+                $client['total_impaye'] = $this->clientModel->getTotalImpaye($id);
+                $client['en_retard'] = $this->clientModel->isEnRetard($id);
+            }
+        }
+        unset($client);
+        return ['view' => 'clients/index', 'data' => ['clients' => $clients, 'can_view_finance' => $canViewFinance]];
     }
 
     public function create(array $data): array {
@@ -49,7 +60,8 @@ class ClientController {
             }
 
             if (!$error) {
-                $clientId = $this->clientModel->create($nom, $ville, $telephone, $userId, $typeClient);
+                $paymentDelay = hasPermission('clients', 'edit') ? (int)($data['payment_delay'] ?? 30) : 30;
+                $clientId = $this->clientModel->create($nom, $ville, $telephone, $userId, $typeClient, $paymentDelay);
                 header('Location: index.php?action=clients');
                 exit();
             }
@@ -85,7 +97,8 @@ class ClientController {
             }
 
             if (!$error) {
-                $this->clientModel->update($id, $nom, $ville, $telephone, $typeClient);
+                $paymentDelay = hasPermission('clients', 'edit') ? (int)($data['payment_delay'] ?? $client['payment_delay'] ?? 30) : (int)($client['payment_delay'] ?? 30);
+                $this->clientModel->update($id, $nom, $ville, $telephone, $typeClient, $paymentDelay);
                 header('Location: index.php?action=clients');
                 exit();
             }
@@ -94,7 +107,8 @@ class ClientController {
                 'nom' => $nom,
                 'ville' => $ville,
                 'telephone' => $telephone,
-                'type_client' => $typeClient
+                'type_client' => $typeClient,
+                'payment_delay' => (int)($data['payment_delay'] ?? $client['payment_delay'] ?? 30)
             ]);
         }
 
@@ -152,16 +166,23 @@ class ClientController {
         $term = trim($data['term'] ?? '');
         header('Content-Type: application/json');
         if ($term === '') {
-            // Afficher TOUS les clients si la recherche est vide :
             $clients = $this->clientModel->getAll();
         } else {
-            // On veut retourner toutes les infos pour l'affichage du tableau (nom, ville, téléphone, id, permissions)
             $clients = $this->clientModel->searchFull($term);
         }
+        $canViewFinance = isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'manager']);
         foreach ($clients as &$client) {
+            $id = (int)$client['id_clients'];
             $client['editable'] = hasPermission('clients', 'edit');
             $client['deletable'] = hasPermission('clients', 'delete');
+            $client['date_dernier_devis'] = $this->clientModel->getDateDernierDevis($id);
+            if ($canViewFinance) {
+                $client['total_facturise'] = $this->clientModel->getTotalFacturise($id);
+                $client['total_impaye'] = $this->clientModel->getTotalImpaye($id);
+                $client['en_retard'] = $this->clientModel->isEnRetard($id);
+            }
         }
+        unset($client);
         echo json_encode($clients);
         exit();
     }

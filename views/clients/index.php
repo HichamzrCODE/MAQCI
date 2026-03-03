@@ -24,6 +24,13 @@
                     <th style="min-width:95px;">Ville</th>
                     <th style="min-width:105px;">Téléphone</th>
                     <th style="min-width:105px;">Type</th>
+                    <th style="min-width:80px;">Délai (j)</th>
+                    <?php if ($can_view_finance): ?>
+                        <th style="min-width:110px;">Total facturisé</th>
+                        <th style="min-width:100px;">Encours</th>
+                        <th style="min-width:80px;">Statut</th>
+                    <?php endif; ?>
+                    <th style="min-width:100px;">Dernier devis</th>
                     <th style="width:1%;white-space:nowrap;">Actions</th>
                 </tr>
             </thead>
@@ -35,6 +42,19 @@
                         <td><?= htmlspecialchars($client['ville']); ?></td>
                         <td><?= htmlspecialchars($client['telephone']); ?></td>
                         <td><?= htmlspecialchars($client['type_client'] === 'facture' ? 'Entreprise (Facture)' : 'Cash') ?></td>
+                        <td><?= (int)($client['payment_delay'] ?? 30) ?> j</td>
+                        <?php if ($can_view_finance): ?>
+                            <td><?= number_format($client['total_facturise'] ?? 0, 2, ',', ' ') ?> DH</td>
+                            <td><?= number_format($client['total_impaye'] ?? 0, 2, ',', ' ') ?> DH</td>
+                            <td>
+                                <?php if (($client['total_impaye'] ?? 0) > 0): ?>
+                                    <?= ($client['en_retard'] ?? false) ? '<span class="badge-statut retard" title="En retard de paiement">🔴 En retard</span>' : '<span class="badge-statut ajour" title="Paiement à jour">🟢 À jour</span>' ?>
+                                <?php else: ?>
+                                    <span class="text-muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                        <?php endif; ?>
+                        <td><?= $client['date_dernier_devis'] ? htmlspecialchars($client['date_dernier_devis']) : '<span class="text-muted">—</span>' ?></td>
                         <td class="actions-cell">
                             <div class="d-flex flex-nowrap gap-1">
                                 <a href="index.php?action=clients/show&id=<?= $client['id_clients']; ?>" class="btn btn-info btn-sm px-2 py-0">Voir</a>
@@ -67,6 +87,9 @@
 .compact-table .actions-cell { white-space: nowrap; }
 .compact-table .btn-sm { font-size: 0.92rem; min-width: 28px; }
 input#client-search { font-size:0.98rem; }
+.badge-statut { font-size: 0.88rem; white-space: nowrap; }
+.badge-statut.retard { color: #c0392b; }
+.badge-statut.ajour { color: #27ae60; }
 @media (max-width: 600px) {
     .compact-table th, .compact-table td { font-size:0.92rem; }
 }
@@ -74,6 +97,8 @@ input#client-search { font-size:0.98rem; }
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
+var canViewFinance = <?= ($can_view_finance ?? false) ? 'true' : 'false' ?>;
+
 $(function() {
     $('#client-search').on('input', function() {
         var term = $(this).val();
@@ -86,7 +111,8 @@ $(function() {
                 var $tbody = $('#clients-table-body');
                 $tbody.empty();
                 if (data.length === 0) {
-                    $tbody.append('<tr><td colspan="4" class="text-center text-muted">Aucun client trouvé</td></tr>');
+                    var colspan = canViewFinance ? 10 : 7;
+                    $tbody.append('<tr><td colspan="' + colspan + '" class="text-center text-muted">Aucun client trouvé</td></tr>');
                 } else {
                     var alt = false;
                     $.each(data, function(i, client) {
@@ -97,12 +123,35 @@ $(function() {
                         if (client.deletable)
                             actions += '<a href="index.php?action=clients/delete&id=' + client.id_clients + '" class="btn btn-danger btn-sm px-2 py-0">X</a>';
                         actions += '</div>';
+
+                        var typeLabel = client.type_client === 'facture' ? 'Entreprise (Facture)' : 'Cash';
+                        var delay = (client.payment_delay || 30) + ' j';
+                        var dernierDevis = client.date_dernier_devis ? $('<div>').text(client.date_dernier_devis).html() : '<span class="text-muted">—</span>';
+
+                        var financeHtml = '';
+                        if (canViewFinance) {
+                            var totalF = parseFloat(client.total_facturise || 0).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DH';
+                            var impaye = parseFloat(client.total_impaye || 0).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DH';
+                            var statut = '';
+                            if ((client.total_impaye || 0) > 0) {
+                                statut = client.en_retard
+                                    ? '<span class="badge-statut retard" title="En retard de paiement">🔴 En retard</span>'
+                                    : '<span class="badge-statut ajour" title="Paiement à jour">🟢 À jour</span>';
+                            } else {
+                                statut = '<span class="text-muted">—</span>';
+                            }
+                            financeHtml = '<td>' + totalF + '</td><td>' + impaye + '</td><td>' + statut + '</td>';
+                        }
+
                         $tbody.append(
-                            '<tr'+(alt?' class="table-row-alt"':'')+'>' +
+                            '<tr' + (alt ? ' class="table-row-alt"' : '') + '>' +
                                 '<td>' + $('<div>').text(client.nom).html() + '</td>' +
                                 '<td>' + (client.ville ? $('<div>').text(client.ville).html() : '') + '</td>' +
                                 '<td>' + (client.telephone ? $('<div>').text(client.telephone).html() : '') + '</td>' +
-                                '<td>' + (client.type_client ? $('<div>').text(client.type_client).html() : '') + '</td>' +
+                                '<td>' + $('<div>').text(typeLabel).html() + '</td>' +
+                                '<td>' + delay + '</td>' +
+                                financeHtml +
+                                '<td>' + dernierDevis + '</td>' +
                                 '<td class="actions-cell">' + actions + '</td>' +
                             '</tr>'
                         );

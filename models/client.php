@@ -14,11 +14,11 @@ class Client {
     }
 
     // 2. Créer un client
-    public function create(string $nom, string $ville, string $telephone, int $userId, string $typeClient): int {
+    public function create(string $nom, string $ville, string $telephone, int $userId, string $typeClient, int $paymentDelay = 30): int {
         $stmt = $this->db->prepare(
-            "INSERT INTO clients (nom, ville, telephone, created_by, type_client, created_at) VALUES (?, ?, ?, ?, ?, NOW())"
+            "INSERT INTO clients (nom, ville, telephone, created_by, type_client, payment_delay, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())"
         );
-        $stmt->execute([$nom, $ville, $telephone, $userId, $typeClient]);
+        $stmt->execute([$nom, $ville, $telephone, $userId, $typeClient, $paymentDelay]);
         return (int)$this->db->lastInsertId();
     }
 
@@ -31,11 +31,11 @@ class Client {
     }
 
     // 4. Mettre à jour un client
-    public function update(int $id, string $nom, string $ville, string $telephone, string $typeClient): void {
+    public function update(int $id, string $nom, string $ville, string $telephone, string $typeClient, int $paymentDelay = 30): void {
         $stmt = $this->db->prepare(
-            "UPDATE clients SET nom = ?, ville = ?, telephone = ?, type_client = ? WHERE id_clients = ?"
+            "UPDATE clients SET nom = ?, ville = ?, telephone = ?, type_client = ?, payment_delay = ? WHERE id_clients = ?"
         );
-        $stmt->execute([$nom, $ville, $telephone, $typeClient, $id]);
+        $stmt->execute([$nom, $ville, $telephone, $typeClient, $paymentDelay, $id]);
     }
 
     // 5. Supprimer un client
@@ -198,5 +198,62 @@ public function getFacturesImpayeesParReleveSansTotalVersement() {
                 HAVING DATEDIFF(NOW(), last_operation) > 30
                 ORDER BY last_operation ASC";
         return $this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // 14. Montant total facturisé pour un client
+    public function getTotalFacturise(int $clientId): float {
+        $stmt = $this->db->prepare("
+            SELECT COALESCE(SUM(cl.montant), 0)
+            FROM credit_lignes cl
+            JOIN credit_releves cr ON cl.releve_id = cr.id
+            WHERE cr.client_id = ?
+              AND cl.montant > 0
+              AND (cl.numero_facture IS NULL OR (UPPER(cl.numero_facture) NOT LIKE '%RETOUR%' AND UPPER(cl.numero_facture) NOT LIKE '%AVOIR%'))
+        ");
+        $stmt->execute([$clientId]);
+        return (float)$stmt->fetchColumn();
+    }
+
+    // 15. Montant impayé (encours) pour un client
+    public function getTotalImpaye(int $clientId): float {
+        $stmt = $this->db->prepare("
+            SELECT COALESCE(SUM(total_general), 0)
+            FROM credit_releves
+            WHERE client_id = ? AND total_general > 0
+        ");
+        $stmt->execute([$clientId]);
+        return (float)$stmt->fetchColumn();
+    }
+
+    // 16. Date du dernier devis pour un client
+    public function getDateDernierDevis(int $clientId): ?string {
+        $stmt = $this->db->prepare("SELECT MAX(date) FROM devis WHERE client_id = ?");
+        $stmt->execute([$clientId]);
+        $date = $stmt->fetchColumn();
+        return $date ?: null;
+    }
+
+    // 17. Vérifier si un client est en retard de paiement
+    public function isEnRetard(int $clientId): bool {
+        $stmtDelay = $this->db->prepare("SELECT payment_delay FROM clients WHERE id_clients = ?");
+        $stmtDelay->execute([$clientId]);
+        $delay = (int)($stmtDelay->fetchColumn() ?: 30);
+
+        $sql = "
+            SELECT COUNT(*)
+            FROM credit_releves cr
+            WHERE cr.client_id = ?
+              AND cr.total_general > 0
+              AND EXISTS (
+                  SELECT 1 FROM credit_lignes cl
+                  WHERE cl.releve_id = cr.id
+                    AND cl.montant > 0
+                    AND cl.date_operation <= DATE_SUB(NOW(), INTERVAL ? DAY)
+                    AND (cl.numero_facture IS NULL OR (UPPER(cl.numero_facture) NOT LIKE '%RETOUR%' AND UPPER(cl.numero_facture) NOT LIKE '%AVOIR%'))
+              )
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$clientId, $delay]);
+        return (int)$stmt->fetchColumn() > 0;
     }
 }

@@ -20,7 +20,16 @@ class FournisseurController {
         }
 
         $fournisseurs = $this->fournisseurModel->getAll();
-        return ['view' => 'fournisseurs/index', 'data' => ['fournisseurs' => $fournisseurs]];
+        $canViewFinance = isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'manager']);
+        if ($canViewFinance) {
+            foreach ($fournisseurs as &$f) {
+                $id = (int)$f['id_fournisseurs'];
+                $f['nb_articles'] = $this->fournisseurModel->countArticles($id);
+                $f['prix_moyen'] = $this->fournisseurModel->getPrixMoyenAchat($id);
+            }
+            unset($f);
+        }
+        return ['view' => 'fournisseurs/index', 'data' => ['fournisseurs' => $fournisseurs, 'can_view_finance' => $canViewFinance]];
     }
 
     public function create(array $data): array {
@@ -48,7 +57,9 @@ class FournisseurController {
         }
 
         if (!$error) {
-            $fournisseurId = $this->fournisseurModel->create($nom_fournisseurs, $userId);
+            $email = trim($data['email'] ?? '');
+            $telephone = trim($data['telephone'] ?? '');
+            $fournisseurId = $this->fournisseurModel->create($nom_fournisseurs, $userId, $email, $telephone);
             header('Location: index.php?action=fournisseurs');
             exit();
         }
@@ -73,13 +84,15 @@ class FournisseurController {
         $error = null;
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nom_fournisseurs = trim($data['nom_fournisseurs'] ?? '');
+            $email = trim($data['email'] ?? '');
+            $telephone = trim($data['telephone'] ?? '');
 
             if (empty($nom_fournisseurs)) {
                 $error = "Le nom du fournisseur est obligatoire.";
             }
 
             if (!$error) {
-                $this->fournisseurModel->update($id, $nom_fournisseurs);
+                $this->fournisseurModel->update($id, $nom_fournisseurs, $email, $telephone);
                 header('Location: index.php?action=fournisseurs');
                 exit();
             }
@@ -131,10 +144,17 @@ public function search(array $data): void {
     } else {
         $fournisseurs = $this->fournisseurModel->searchFull($term);
     }
+    $canViewFinance = isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'manager']);
     foreach ($fournisseurs as &$fournisseur) {
         $fournisseur['editable'] = hasPermission('fournisseurs', 'edit');
         $fournisseur['deletable'] = hasPermission('fournisseurs', 'delete');
+        if ($canViewFinance) {
+            $id = (int)$fournisseur['id_fournisseurs'];
+            $fournisseur['nb_articles'] = $this->fournisseurModel->countArticles($id);
+            $fournisseur['prix_moyen'] = $this->fournisseurModel->getPrixMoyenAchat($id);
+        }
     }
+    unset($fournisseur);
     echo json_encode($fournisseurs);
     exit();
 }
