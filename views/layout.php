@@ -119,7 +119,7 @@ if (!(isset($_GET['action']) && $_GET['action'] === 'login')) {
                 <i class="fas fa-boxes"></i><span>Articles</span>
             </a>
             <?php endif; ?>
-            <?php if (hasPermission('articles', 'view')): ?>
+            <?php if (hasPermission('depots', 'view')): ?>
             <a class="nav-link" href="index.php?action=depots">
                 <i class="fas fa-warehouse"></i><span>Dépôts</span>
             </a>

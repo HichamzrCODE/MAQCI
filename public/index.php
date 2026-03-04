@@ -442,6 +442,13 @@ case 'fs/extrait':
 
 
         
+// PARAMÈTRES (ADMIN SEULEMENT)
+    case 'settings':
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
+        $controller = new SettingsController($db);
+        $viewData = $controller->index();
+        break;
+
 // SAUVEGARDE
     case 'sauvegarde':
     if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
