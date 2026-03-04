@@ -442,6 +442,13 @@ case 'fs/extrait':
 
 
         
+// PARAMÈTRES (ADMIN SEULEMENT)
+    case 'settings':
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
+        $controller = new SettingsController($db);
+        $viewData = $controller->index();
+        break;
+
 // SAUVEGARDE
     case 'sauvegarde':
     if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') die("Accès refusé.");
@@ -463,6 +470,35 @@ case 'sauvegarde/download':
     $controller->download($file);
     exit();
 
+
+    // --- MOUVEMENTS DE STOCK ---
+    case 'stock_movements':
+    case 'stock_movements/index':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->index($_GET);
+        break;
+    case 'stock_movements/create':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->create($_POST);
+        break;
+    case 'stock_movements/show':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de mouvement invalide.");
+        $controller = new StockMovementController($db);
+        $viewData = $controller->show((int)$id);
+        break;
+    case 'stock_movements/alerts':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->getAlerts();
+        break;
+    case 'stock_movements/historique':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->getHistorique($_GET);
+        break;
+    case 'stock_movements/seuils':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->seuils($_POST);
+        break;
 
     // --- ERREUR PAR DÉFAUT ---
     default:

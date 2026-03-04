@@ -20,10 +20,12 @@ function hasPermission($page, $action) {
     // Droits par défaut du user lambda
     if ($_SESSION['role'] === 'user') {
         if ($page === 'articles' && in_array($action, ['view', 'create', 'edit'])) return true;
+        if ($page === 'depots' && $action === 'view') return true;
         if ($page === 'fournisseurs' && $action === 'view') return true;
         if ($page === 'clients' && in_array($action, ['view', 'create'])) return true;
         if ($page === 'devis' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'voiture' && $action === 'view') return true;
+        if ($page === 'stock_movements' && $action === 'view') return true;
         // CREDIT, RELEVE, FS : jamais pour user
         return false;
     }
@@ -38,6 +40,7 @@ function hasPermission($page, $action) {
         // Droit en dur sur fournisseurs (voir, créer, modifier)
         if ($page === 'fournisseurs' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'articles' && in_array($action, ['view', 'create', 'edit'])) return true;
+        if ($page === 'depots' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'clients' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'devis' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'dashboard' && $action === 'view') return true; 
@@ -47,6 +50,7 @@ function hasPermission($page, $action) {
         if (in_array($page, ['credit', 'releve', 'fs']) && $action === 'view') return true;
         if ($page === 'fs' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'releve' && in_array($action, ['view', 'create', 'edit'])) return true;
+        if ($page === 'stock_movements' && in_array($action, ['view', 'create', 'edit'])) return true;
         return false;
     }
 

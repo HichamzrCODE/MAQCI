@@ -353,6 +353,26 @@ CREATE TABLE `voiture` (
 --
 
 --
+-- Table structure for table `settings`
+--
+
+DROP TABLE IF EXISTS `settings`;
+CREATE TABLE `settings` (
+  `setting_key` varchar(100) NOT NULL,
+  `setting_value` text DEFAULT NULL,
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Default settings
+--
+
+INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
+('app_name', 'MAQCI'),
+('app_icon', 'fa-cube'),
+('logo_path', NULL);
+
+--
 -- Dumping events for database 's6'
 --
 
