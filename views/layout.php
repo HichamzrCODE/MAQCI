@@ -112,6 +112,12 @@ if (!(isset($_GET['action']) && $_GET['action'] === 'login')) {
             <?php if (hasPermission('voiture', 'view')): ?>
                 <a class="nav-link" href="index.php?action=voiture">Voiture</a>
             <?php endif; ?>
+            <?php if (hasPermission('transferts_stock', 'view')): ?>
+                <a class="nav-link" href="index.php?action=transferts_stock">Transferts</a>
+            <?php endif; ?>
+            <?php if (hasPermission('receptions_fournisseur', 'view')): ?>
+                <a class="nav-link" href="index.php?action=receptions_fournisseur">Réceptions</a>
+            <?php endif; ?>
             <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
                 <a class="nav-link sidebar-backup-link" href="index.php?action=sauvegarde" title="Sauvegarder ou télécharger les sauvegardes">
                     Sauvegarde

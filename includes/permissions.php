@@ -24,6 +24,8 @@ function hasPermission($page, $action) {
         if ($page === 'clients' && in_array($action, ['view', 'create'])) return true;
         if ($page === 'devis' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'voiture' && $action === 'view') return true;
+        if ($page === 'transferts_stock' && in_array($action, ['view', 'create', 'edit'])) return true;
+        if ($page === 'receptions_fournisseur' && in_array($action, ['view', 'create', 'edit'])) return true;
         // CREDIT, RELEVE, FS : jamais pour user
         return false;
     }
@@ -47,6 +49,8 @@ function hasPermission($page, $action) {
         if (in_array($page, ['credit', 'releve', 'fs']) && $action === 'view') return true;
         if ($page === 'fs' && in_array($action, ['view', 'create', 'edit'])) return true;
         if ($page === 'releve' && in_array($action, ['view', 'create', 'edit'])) return true;
+        if ($page === 'transferts_stock' && in_array($action, ['view', 'create', 'edit'])) return true;
+        if ($page === 'receptions_fournisseur' && in_array($action, ['view', 'create', 'edit'])) return true;
         return false;
     }
 
