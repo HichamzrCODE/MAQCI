@@ -464,6 +464,82 @@ case 'sauvegarde/download':
     exit();
 
 
+    // --- TRANSFERTS DE STOCK ---
+    case 'transferts_stock':
+        $controller = new TransfertStockController($db);
+        $viewData = $controller->index();
+        break;
+    case 'transferts_stock/create':
+        $controller = new TransfertStockController($db);
+        $viewData = $controller->create($_POST);
+        break;
+    case 'transferts_stock/show':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de transfert invalide.");
+        $controller = new TransfertStockController($db);
+        $viewData = $controller->show((int)$id);
+        break;
+    case 'transferts_stock/addLigne':
+        $controller = new TransfertStockController($db);
+        $controller->addLigne();
+        exit();
+    case 'transferts_stock/removeLigne':
+        $controller = new TransfertStockController($db);
+        $controller->removeLigne();
+        exit();
+    case 'transferts_stock/valider':
+        $controller = new TransfertStockController($db);
+        $controller->valider();
+        exit();
+    case 'transferts_stock/delete':
+        $controller = new TransfertStockController($db);
+        $controller->delete();
+        exit();
+    case 'transferts_stock/searchArticles':
+        $controller = new TransfertStockController($db);
+        $controller->searchArticles();
+        exit();
+
+    // --- RÉCEPTIONS FOURNISSEUR ---
+    case 'receptions_fournisseur':
+        $controller = new ReceptionFournisseurController($db);
+        $viewData = $controller->index();
+        break;
+    case 'receptions_fournisseur/create':
+        $controller = new ReceptionFournisseurController($db);
+        $viewData = $controller->create($_POST);
+        break;
+    case 'receptions_fournisseur/show':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de réception invalide.");
+        $controller = new ReceptionFournisseurController($db);
+        $viewData = $controller->show((int)$id);
+        break;
+    case 'receptions_fournisseur/addLigne':
+        $controller = new ReceptionFournisseurController($db);
+        $controller->addLigne();
+        exit();
+    case 'receptions_fournisseur/updateLigne':
+        $controller = new ReceptionFournisseurController($db);
+        $controller->updateLigne();
+        exit();
+    case 'receptions_fournisseur/removeLigne':
+        $controller = new ReceptionFournisseurController($db);
+        $controller->removeLigne();
+        exit();
+    case 'receptions_fournisseur/valider':
+        $controller = new ReceptionFournisseurController($db);
+        $controller->valider();
+        exit();
+    case 'receptions_fournisseur/delete':
+        $controller = new ReceptionFournisseurController($db);
+        $controller->delete();
+        exit();
+    case 'receptions_fournisseur/searchArticles':
+        $controller = new ReceptionFournisseurController($db);
+        $controller->searchArticles();
+        exit();
+
     // --- ERREUR PAR DÉFAUT ---
     default:
         $viewData = ['view' => 'error', 'data' => ['message' => 'Page non trouvée']];
