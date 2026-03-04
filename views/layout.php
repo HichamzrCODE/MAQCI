@@ -78,6 +78,9 @@ if (!(isset($_GET['action']) && $_GET['action'] === 'login')) {
                     <?php if (hasPermission('articles', 'view')): ?>
                         <li class="nav-item"><a class="nav-link" href="index.php?action=articles">Articles</a></li>
                     <?php endif; ?>
+                    <?php if (hasPermission('stock_movements', 'view')): ?>
+                        <li class="nav-item"><a class="nav-link" href="index.php?action=stock_movements">Stock</a></li>
+                    <?php endif; ?>
                     <?php if (hasPermission('devis', 'view')): ?>
                         <li class="nav-item"><a class="nav-link" href="index.php?action=devis">Devis</a></li>
                     <?php endif; ?>

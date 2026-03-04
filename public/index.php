@@ -464,6 +464,35 @@ case 'sauvegarde/download':
     exit();
 
 
+    // --- MOUVEMENTS DE STOCK ---
+    case 'stock_movements':
+    case 'stock_movements/index':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->index($_GET);
+        break;
+    case 'stock_movements/create':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->create($_POST);
+        break;
+    case 'stock_movements/show':
+        $id = $_GET['id'] ?? null;
+        if ($id === null || !is_numeric($id)) die("ID de mouvement invalide.");
+        $controller = new StockMovementController($db);
+        $viewData = $controller->show((int)$id);
+        break;
+    case 'stock_movements/alerts':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->getAlerts();
+        break;
+    case 'stock_movements/historique':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->getHistorique($_GET);
+        break;
+    case 'stock_movements/seuils':
+        $controller = new StockMovementController($db);
+        $viewData = $controller->seuils($_POST);
+        break;
+
     // --- ERREUR PAR DÉFAUT ---
     default:
         $viewData = ['view' => 'error', 'data' => ['message' => 'Page non trouvée']];
